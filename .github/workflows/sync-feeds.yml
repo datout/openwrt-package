@@ -1,4 +1,4 @@
-name: Sync feeds (aggregate)
+﻿name: Sync feeds (aggregate)
 
 on:
   workflow_dispatch:
@@ -16,8 +16,10 @@ jobs:
       matrix:
         target:
           - Lede
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -31,14 +33,14 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-            - name: Sync branch
+      - name: Sync branch
         shell: bash
         run: |
           set -e
-          echo "==> repo root: $PWD"
-          echo "==> list tree:"
+          echo "==> PWD: $PWD"
+          echo "==> ls:"
           ls -la
-          echo "==> list sources:"
+          echo "==> ls sources:"
           ls -la sources || true
 
           git reset --hard
@@ -48,16 +50,16 @@ jobs:
           dos2unix /tmp/sync_branch.sh || true
           chmod +x /tmp/sync_branch.sh
 
-          # 兼容大小写：优先 sources/Lede.list，否则尝试小写/大写
           LIST_FILE="sources/${{ matrix.target }}.list"
           if [ ! -f "$LIST_FILE" ]; then
-            LIST_FILE="$(ls sources 2>/dev/null | grep -i "^${{ matrix.target }}\.list$" | head -n 1 || true)"
-            if [ -n "$LIST_FILE" ]; then
-              LIST_FILE="sources/$LIST_FILE"
+            # 尝试大小写不敏感匹配
+            FOUND="$(ls sources 2>/dev/null | grep -i "^${{ matrix.target }}\.list$" | head -n 1 || true)"
+            if [ -n "$FOUND" ]; then
+              LIST_FILE="sources/$FOUND"
             fi
           fi
 
-          echo "==> using list file: $LIST_FILE"
+          echo "==> Using list file: $LIST_FILE"
           test -f "$LIST_FILE"
 
           /tmp/sync_branch.sh "${{ matrix.target }}" "$LIST_FILE"
