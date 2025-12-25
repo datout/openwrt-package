@@ -1,4 +1,4 @@
-﻿name: Mirror upstream openwrt-package
+﻿name: Sync openwrt-package (snapshot)
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  mirror:
+  sync:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (main)
@@ -17,32 +17,78 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync git
+
       - name: Configure git
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Fetch upstream branches
-        run: |
-          git remote add upstream https://github.com/281677160/openwrt-package.git || true
-          git fetch upstream --prune
-
-      - name: Mirror all upstream branches to this repo
+      - name: Sync all upstream branches as snapshots
         shell: bash
         run: |
           set -euo pipefail
 
-          BRANCHES="$(git for-each-ref --format='%(refname:strip=3)' refs/remotes/upstream/* \
-            | grep -v '^HEAD$' \
+          UP_URL="https://github.com/281677160/openwrt-package.git"
+
+          # 取上游所有分支名
+          BRANCHES="$(git ls-remote --heads "$UP_URL" \
+            | awk '{print $2}' \
+            | sed 's#refs/heads/##' \
+            | grep -Ev '^(HEAD|main)$' \
             | sort -u)"
 
           echo "Upstream branches:"
           echo "$BRANCHES"
 
+          failed=()
+
           for b in $BRANCHES; do
-            echo "==> Sync branch: $b"
-            git checkout -B "$b" "upstream/$b"
-            git push -f origin "$b"
+            echo "==> Sync snapshot branch: $b"
+
+            tmp="$(mktemp -d)"
+            git clone --depth 1 -b "$b" "$UP_URL" "$tmp/up" >/dev/null 2>&1 || {
+              echo "::error ::clone failed for $b"
+              failed+=("$b")
+              rm -rf "$tmp"
+              continue
+            }
+
+            # 切到目标分支：存在就切，不存在就孤儿分支
+            if git show-ref --verify --quiet "refs/heads/$b"; then
+              git checkout "$b"
+            else
+              git checkout --orphan "$b"
+            fi
+
+            # 清空工作区（保留 .git）
+            find . -mindepth 1 -maxdepth 1 ! -name ".git" -exec rm -rf {} + || true
+
+            # 拷贝上游快照内容
+            rsync -a --delete --exclude ".git" "$tmp/up/" ./
+
+            git add -A
+            if git diff --cached --quiet; then
+              echo "   no changes: $b"
+            else
+              git commit -m "sync: $b ($(date -u +%F))"
+            fi
+
+            # push（快照很小，基本不会 500）
+            if ! git push -f origin "$b"; then
+              echo "::error ::push failed for $b"
+              failed+=("$b")
+            fi
+
+            rm -rf "$tmp"
           done
 
           git checkout main || true
+
+          if [ ${#failed[@]} -gt 0 ]; then
+            echo "Failed branches: ${failed[*]}"
+            exit 1
+          fi
