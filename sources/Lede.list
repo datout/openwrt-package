@@ -7,14 +7,14 @@ https://github.com/xiaorouji/openwrt-passwall-packages.git main chinadns-ng dns2
 
 https://github.com/fw876/helloworld.git master luci-app-ssr-plus chinadns-ng ipt2socks tuic-client xray-plugin v2ray-plugin shadowsocks-libev shadowsocksr-libev simple-obfs tcping
 
-https://github.com/rufengsuixing/luci-app-adguardhome.git master luci-app-adguardhome
-https://github.com/yingziwu/luci-app-fakehttp.git main luci-app-fakehttp fakehttp
+https://github.com/rufengsuixing/luci-app-adguardhome.git master .
+https://github.com/yingziwu/luci-app-fakehttp.git main .
 
 # adguardhome
-https://github.com/rufengsuixing/luci-app-adguardhome.git master luci-app-adguardhome
+https://github.com/rufengsuixing/luci-app-adguardhome.git master .
 
 # fakehttp（如果你要）
-https://github.com/yingziwu/luci-app-fakehttp.git main luci-app-fakehttp fakehttp
+https://github.com/yingziwu/luci-app-fakehttp.git main .
 
 # argon 主题（你之前 common.sh 里用过 281677160 的 argon，这里给你一个常见源）
-https://github.com/jerrykuku/luci-theme-argon.git master luci-theme-argon
+https://github.com/jerrykuku/luci-theme-argon.git master .
