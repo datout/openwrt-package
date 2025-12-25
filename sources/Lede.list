@@ -10,10 +10,8 @@ https://github.com/rufengsuixing/luci-app-adguardhome.git master .
 https://github.com/yingziwu/luci-app-fakehttp.git main .
 
 # adguardhome
-https://github.com/rufengsuixing/luci-app-adguardhome.git master .
 
 # fakehttp（如果你要）
-https://github.com/yingziwu/luci-app-fakehttp.git main .
 
 # argon 主题（你之前 common.sh 里用过 281677160 的 argon，这里给你一个常见源）
 https://github.com/jerrykuku/luci-theme-argon.git master .
