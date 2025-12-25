@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 BRANCH="${1:?branch required}"       # 例如：Lede
@@ -28,8 +28,12 @@ find . -mindepth 1 -maxdepth 1 ! -name ".git" -exec rm -rf {} + || true
 
 # 逐行读取（从 /tmp）
 while IFS= read -r line; do
+  # trim 左侧空白，避免 "  # comment" 这种被当成有效行
+  line="${line#"${line%%[![:space:]]*}"}"
   [[ -z "$line" ]] && continue
   [[ "$line" =~ ^# ]] && continue
+# 非 http 开头的行一律跳过（防止说明文字/乱行导致 git clone）
+[[ "$line" =~ ^https?:// ]] || { echo "     (skip invalid line) $line"; continue; }
 
   url="$(echo "$line" | awk '{print $1}')"
   ref="$(echo "$line" | awk '{print $2}')"
