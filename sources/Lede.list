@@ -9,3 +9,12 @@ https://github.com/fw876/helloworld.git master luci-app-ssr-plus chinadns-ng ipt
 
 https://github.com/rufengsuixing/luci-app-adguardhome.git master luci-app-adguardhome
 https://github.com/yingziwu/luci-app-fakehttp.git main luci-app-fakehttp fakehttp
+
+# adguardhome
+https://github.com/rufengsuixing/luci-app-adguardhome.git master luci-app-adguardhome
+
+# fakehttp（如果你要）
+https://github.com/yingziwu/luci-app-fakehttp.git main luci-app-fakehttp fakehttp
+
+# argon 主题（你之前 common.sh 里用过 281677160 的 argon，这里给你一个常见源）
+https://github.com/jerrykuku/luci-theme-argon.git master luci-theme-argon
