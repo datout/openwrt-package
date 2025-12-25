@@ -1,0 +1,11 @@
+﻿# 每行格式：
+# <git_url> <branch> <subdir1> [subdir2 ...]
+# subdir 是要从上游仓库拷贝到分支根目录的目录
+
+https://github.com/xiaorouji/openwrt-passwall.git master luci-app-passwall luci-app-passwall2
+https://github.com/xiaorouji/openwrt-passwall-packages.git master chinadns-ng dns2socks ipt2socks naiveproxy shadowsocks-libev shadowsocksr-libev simple-obfs tcping trojan-plus tuic-client v2ray-plugin xray-plugin sing-box geoview hysteria haproxy
+
+https://github.com/fw876/helloworld.git master luci-app-ssr-plus chinadns-ng ipt2socks tuic-client xray-plugin v2ray-plugin shadowsocks-libev shadowsocksr-libev simple-obfs tcping
+
+https://github.com/rufengsuixing/luci-app-adguardhome.git master luci-app-adguardhome
+https://github.com/yingziwu/luci-app-fakehttp.git main luci-app-fakehttp fakehttp

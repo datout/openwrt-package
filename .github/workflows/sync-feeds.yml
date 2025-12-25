@@ -1,0 +1,37 @@
+﻿name: Sync feeds (aggregate)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 2 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - Lede
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install rsync
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync
+
+      - name: Configure git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync branch
+        run: |
+          chmod +x scripts/sync_branch.sh
+          bash scripts/sync_branch.sh "${{ matrix.target }}" "sources/${{ matrix.target }}.list"
