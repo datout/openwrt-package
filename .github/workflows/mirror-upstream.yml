@@ -1,23 +1,48 @@
+﻿name: Mirror upstream openwrt-package
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 1 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (main)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream branches
+        run: |
+          git remote add upstream https://github.com/281677160/openwrt-package.git || true
+          git fetch upstream --prune
+
       - name: Mirror all upstream branches to this repo
         shell: bash
         run: |
           set -euo pipefail
 
-          set -euo pipefail
+          BRANCHES="$(git for-each-ref --format='%(refname:strip=3)' refs/remotes/upstream/* \
+            | grep -v '^HEAD$' \
+            | sort -u)"
 
-# 只取 upstream 下真正的远程分支：refs/remotes/upstream/<branch>
-BRANCHES="$(git for-each-ref --format='%(refname:strip=3)' refs/remotes/upstream/* \
-  | grep -v '^HEAD
- \
-  | sort -u)"
+          echo "Upstream branches:"
+          echo "$BRANCHES"
 
-echo "Upstream branches:"
-echo "$BRANCHES"
+          for b in $BRANCHES; do
+            echo "==> Sync branch: $b"
+            git checkout -B "$b" "upstream/$b"
+            git push -f origin "$b"
+          done
 
-for b in $BRANCHES; do
-  echo "==> Sync branch: $b"
-  git checkout -B "$b" "upstream/$b"
-  git push -f origin "$b"
-done
-
-git checkout main || true
+          git checkout main || true
