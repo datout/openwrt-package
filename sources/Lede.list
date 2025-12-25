@@ -1,8 +1,7 @@
 # format:
 # <git_url> <branch> <subdir> [subdir2 ...]
-
 https://github.com/xiaorouji/openwrt-passwall.git main luci-app-passwall
 https://github.com/fw876/helloworld.git master luci-app-ssr-plus
-https://github.com/rufengsuixing/luci-app-adguardhome.git master luci-app-adguardhome
-https://github.com/yingziwu/luci-app-fakehttp.git main luci-app-fakehttp
-https://github.com/jerrykuku/luci-theme-argon.git master luci-theme-argon
+https://github.com/rufengsuixing/luci-app-adguardhome.git master .
+https://github.com/yingziwu/luci-app-fakehttp.git main .
+https://github.com/jerrykuku/luci-theme-argon.git master .
