@@ -4,10 +4,15 @@ set -euo pipefail
 BRANCH="${1:?branch required}"       # 例如：Lede
 LIST_FILE="${2:?list file required}" # 例如：sources/Lede.list
 
+# 关键：把 list 先拷贝到 /tmp，避免切到目标分支后 list 不见
+TMP_LIST="/tmp/${BRANCH}.list"
+cp "$LIST_FILE" "$TMP_LIST"
+
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+trap 'rm -rf "$TMP" || true' EXIT
 
 echo "==> Sync branch: $BRANCH from $LIST_FILE"
+echo "==> Using tmp list: $TMP_LIST"
 
 git fetch origin --prune
 
@@ -21,7 +26,7 @@ fi
 # 清空（保留 .git）
 find . -mindepth 1 -maxdepth 1 ! -name ".git" -exec rm -rf {} + || true
 
-# 逐行读取 sources list
+# 逐行读取（从 /tmp）
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   [[ "$line" =~ ^# ]] && continue
@@ -44,7 +49,7 @@ while IFS= read -r line; do
       echo "     (skip missing) $d"
     fi
   done
-done < "$LIST_FILE"
+done < "$TMP_LIST"
 
 mkdir -p relevance
 date -u +"last_sync_utc=%Y-%m-%dT%H:%M:%SZ" > relevance/last_sync.txt
