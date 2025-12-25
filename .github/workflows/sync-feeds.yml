@@ -1,4 +1,4 @@
-﻿name: Sync feeds (aggregate)
+name: Sync feeds (aggregate)
 
 on:
   workflow_dispatch:
@@ -32,6 +32,19 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Sync branch
-        run: |
-          chmod +x scripts/sync_branch.sh
-          bash scripts/sync_branch.sh "${{ matrix.target }}" "sources/${{ matrix.target }}.list"
+  shell: bash
+  run: |
+    set -e
+    sudo apt-get update
+    sudo apt-get install -y dos2unix rsync
+
+    # 确保工作区干净（避免 checkout 被阻止）
+    git reset --hard
+    git clean -fd
+
+    # 用 /tmp 脱离工作区运行脚本，避免 checkout 覆盖脚本文件
+    cp scripts/sync_branch.sh /tmp/sync_branch.sh
+    dos2unix /tmp/sync_branch.sh || true
+    chmod +x /tmp/sync_branch.sh
+
+    /tmp/sync_branch.sh "${{ matrix.target }}" "sources/${{ matrix.target }}.list"
