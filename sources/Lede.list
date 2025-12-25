@@ -3,7 +3,7 @@
 # subdir 是要从上游仓库拷贝到分支根目录的目录
 
 https://github.com/xiaorouji/openwrt-passwall.git main luci-app-passwall luci-app-passwall2
-https://github.com/xiaorouji/openwrt-passwall-packages.git master chinadns-ng dns2socks ipt2socks naiveproxy shadowsocks-libev shadowsocksr-libev simple-obfs tcping trojan-plus tuic-client v2ray-plugin xray-plugin sing-box geoview hysteria haproxy
+https://github.com/xiaorouji/openwrt-passwall-packages.git main chinadns-ng dns2socks ipt2socks naiveproxy shadowsocks-libev shadowsocksr-libev simple-obfs tcping trojan-plus tuic-client v2ray-plugin xray-plugin sing-box geoview hysteria haproxy
 
 https://github.com/fw876/helloworld.git master luci-app-ssr-plus chinadns-ng ipt2socks tuic-client xray-plugin v2ray-plugin shadowsocks-libev shadowsocksr-libev simple-obfs tcping
 
