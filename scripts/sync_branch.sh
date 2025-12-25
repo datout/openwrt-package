@@ -47,12 +47,16 @@ while IFS= read -r line; do
   git clone --depth 1 -b "$ref" "$url" "$repo_dir" >/dev/null
 
   for d in $subdirs; do
-    if [[ -e "$repo_dir/$d" ]]; then
-      rsync -a --delete --exclude ".git" "$repo_dir/$d" "./$d"
-    else
-      echo "     (skip missing) $d"
-    fi
-  done
+  if [[ "$d" == "." ]]; then
+    # 同步整个仓库根目录到 ./<repo_name>
+    mkdir -p "./$name"
+    rsync -a --delete --exclude ".git" "$repo_dir/" "./$name/"
+  elif [[ -e "$repo_dir/$d" ]]; then
+    rsync -a --delete --exclude ".git" "$repo_dir/$d/" "./$d/"
+  else
+    echo "     (skip missing) $d"
+  fi
+done
 done < "$TMP_LIST"
 
 mkdir -p relevance
