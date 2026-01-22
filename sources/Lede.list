@@ -3,7 +3,7 @@
 https://github.com/openwrt-passwall/openwrt-passwall.git main luci-app-passwall
 https://github.com/Openwrt-Passwall/openwrt-passwall2.git main luci-app-passwall2
 https://github.com/openwrt-passwall/openwrt-passwall-packages.git main chinadns-ng dns2socks geoview hysteria ipt2socks microsocks naiveproxy shadow-tls shadowsocks-libev shadowsocks-rust shadowsocksr-libev simple-obfs sing-box tcping trojan-plus tuic-client v2ray-geodata v2ray-plugin xray-core xray-plugin
-https://github.com/fw876/helloworld.git master luci-app-ssr-plus
+https://github.com/fw876/helloworld.git master luci-app-ssr-plus lua-neturl mosdns redsocks2 dns2socks-rust v2ray-core v2raya
 https://github.com/yingziwu/luci-app-fakehttp.git main .
 https://github.com/jerrykuku/luci-theme-argon.git master .
 https://github.com/sirpdboy/luci-app-adguardhome.git main luci-app-adguardhome
