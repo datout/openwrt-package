@@ -8,8 +8,18 @@ LIST_FILE="${2:?list file required}" # e.g. sources/Lede.list
 TMP_LIST="/tmp/${BRANCH}.list"
 cp "$LIST_FILE" "$TMP_LIST"
 
+# Copy overlay (from main) to /tmp before switching branch & cleaning
+OVERLAY_DIR="overlays/${BRANCH}"
+TMP_OVERLAY="/tmp/${BRANCH}.overlay"
+rm -rf "$TMP_OVERLAY" || true
+if [ -d "$OVERLAY_DIR" ]; then
+  mkdir -p "$TMP_OVERLAY"
+  rsync -a --exclude ".git" "${OVERLAY_DIR}/" "${TMP_OVERLAY}/"
+  echo "==> Using overlay: ${OVERLAY_DIR}"
+fi
+
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP" || true' EXIT
+trap 'rm -rf "$TMP" "$TMP_OVERLAY" || true' EXIT
 
 echo "==> Sync branch: $BRANCH from $LIST_FILE"
 echo "==> Using tmp list: $TMP_LIST"
@@ -27,7 +37,6 @@ fi
 find . -mindepth 1 -maxdepth 1 ! -name ".git" -exec rm -rf {} + || true
 
 while IFS= read -r line; do
-  # trim leading spaces
   line="${line#"${line%%[![:space:]]*}"}"
   [[ -z "$line" ]] && continue
   [[ "$line" =~ ^# ]] && continue
@@ -38,17 +47,13 @@ while IFS= read -r line; do
   subdirs="$(echo "$line" | cut -d' ' -f3-)"
   name="$(basename "$url" .git)"
 
-  # default: if subdirs empty, sync repo root
-  if [[ -z "${subdirs// }" ]]; then
-    subdirs="."
-  fi
+  [[ -z "${subdirs// }" ]] && subdirs="."
 
   echo "  -> $name ($ref): $subdirs"
 
   repo_dir="$TMP/$name"
   rm -rf "$repo_dir"
 
-  # clone with retry
   cloned=false
   for t in 1 2 3; do
     if git clone --depth 1 -b "$ref" "$url" "$repo_dir" >/dev/null 2>&1; then
@@ -63,17 +68,23 @@ while IFS= read -r line; do
 
   for d in $subdirs; do
     if [[ "$d" == "." ]]; then
-      # sync entire repo root into ./<repo_name>
       target="$name"
       mkdir -p "./$target"
       rsync -a --delete --exclude ".git" "$repo_dir/" "./$target/"
     elif [[ -e "$repo_dir/$d" ]]; then
+      mkdir -p "./$d"
       rsync -a --delete --exclude ".git" "$repo_dir/$d/" "./$d/"
     else
       echo "     (skip missing) $d"
     fi
   done
 done < "$TMP_LIST"
+
+# Apply overlay last so local packages override synced ones
+if [ -d "$TMP_OVERLAY" ]; then
+  echo "==> Apply overlay: ${OVERLAY_DIR}"
+  rsync -a --exclude ".git" "${TMP_OVERLAY}/" "./"
+fi
 
 mkdir -p relevance
 date -u +"last_sync_utc=%Y-%m-%dT%H:%M:%SZ" > relevance/last_sync.txt
@@ -97,5 +108,4 @@ done
 
 $ok || (echo "::error ::push failed for $BRANCH" && exit 1)
 
-# back to main
 git checkout main || true
