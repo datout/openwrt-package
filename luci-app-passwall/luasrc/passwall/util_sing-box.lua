@@ -1079,7 +1079,29 @@ function gen_config(var)
 			table.insert(inbounds, inbound)
 		end
 
-		local function gen_urltest(_node)
+		function gen_socks_config_node(node_id, socks_id, remarks)
+			if node_id then
+				socks_id = node_id:sub(1 + #"Socks_")
+			end
+			local result
+			local socks_node = uci:get_all(appname, socks_id) or nil
+			if socks_node then
+				if not remarks then
+					remarks = "Socks_" .. socks_node.port
+				end
+				result = {
+					remarks = remarks,
+					type = "sing-box",
+					protocol = "socks",
+					address = "127.0.0.1",
+					port = socks_node.port,
+					uot = "1"
+				}
+			end
+			return result
+		end
+
+		function gen_urltest(_node)
 			local urltest_id = _node[".name"]
 			local urltest_tag = "urltest-" .. urltest_id
 			-- existing urltest
@@ -1105,25 +1127,16 @@ function gen_config(var)
 				if is_new_ut_node then
 					local ut_node
 					if ut_node_id:find("Socks_") then
-						local socks_id = ut_node_id:sub(1 + #"Socks_")
-						local socks_node = uci:get_all(appname, socks_id) or nil
-						if socks_node then
-							ut_node = {
-								type = "sing-box",
-								protocol = "socks",
-								address = "127.0.0.1",
-								port = socks_node.port,
-								uot = "1",
-								remarks = "Socks_" .. socks_node.port
-							}
-						end
+						ut_node = gen_socks_config_node(ut_node_id)
 					else
 						ut_node = uci:get_all(appname, ut_node_id)
 					end
 					if ut_node then
 						local outbound = gen_outbound(flag, ut_node, ut_node_tag, { fragment = singbox_settings.fragment == "1" or nil, record_fragment = singbox_settings.record_fragment == "1" or nil, run_socks_instance = not no_run })
 						if outbound then
-							outbound.tag = outbound.tag .. ":" .. ut_node.remarks
+							if ut_node.remarks then
+								outbound.tag = outbound.tag .. ":" .. ut_node.remarks
+							end
 							table.insert(outbounds, outbound)
 							valid_nodes[#valid_nodes + 1] = outbound.tag
 						end
@@ -1145,7 +1158,7 @@ function gen_config(var)
 			return urltest_tag
 		end
 
-		local function set_outbound_detour(node, outbound, outbounds_table, shunt_rule_name)
+		function set_outbound_detour(node, outbound, outbounds_table, shunt_rule_name)
 			if not node or not outbound or not outbounds_table then return nil end
 			local default_outTag = outbound.tag
 			local last_insert_outbound
@@ -1178,9 +1191,12 @@ function gen_config(var)
 				else
 					local preproxy_node = uci:get_all(appname, node.preproxy_node)
 					if preproxy_node then
-						local preproxy_outbound = gen_outbound(nil, preproxy_node)
+						local preproxy_outbound = gen_outbound(node[".name"], preproxy_node)
 						if preproxy_outbound then
-							preproxy_outbound.tag = preproxy_node[".name"] .. ":" .. preproxy_node.remarks
+							preproxy_outbound.tag = preproxy_node[".name"]
+							if preproxy_node.remarks then
+								preproxy_outbound.tag = preproxy_outbound.tag .. ":" .. preproxy_node.remarks
+							end
 							outbound.tag = preproxy_outbound.tag .. " -> " .. outbound.tag
 							outbound.detour = preproxy_outbound.tag
 							last_insert_outbound = preproxy_outbound
@@ -1192,16 +1208,47 @@ function gen_config(var)
 			if node.chain_proxy == "2" and node.to_node then
 				local to_node = uci:get_all(appname, node.to_node)
 				if to_node then
-					local to_outbound = gen_outbound(nil, to_node)
+					local to_outbound
+					if to_node.type ~= "sing-box" then
+						local tag = to_node[".name"]
+						local new_port = api.get_new_port()
+						table.insert(inbounds, {
+							type = "direct",
+							tag = tag,
+							listen = "127.0.0.1",
+							listen_port = new_port,
+							override_address = to_node.address,
+							override_port = tonumber(to_node.port),
+						})
+						table.insert(rules, 1, {
+							inbound = {tag},
+							outbound = outbound.tag,
+						})
+						if to_node.tls_serverName == nil then
+							to_node.tls_serverName = to_node.address
+						end
+						to_node.address = "127.0.0.1"
+						to_node.port = new_port
+						to_outbound = gen_outbound(node[".name"], to_node, tag, {
+							tag = tag,
+							run_socks_instance = not no_run
+						})
+					else
+						to_outbound = gen_outbound(node[".name"], to_node)
+					end
 					if to_outbound then
 						if shunt_rule_name then
 							to_outbound.tag = outbound.tag
 							outbound.tag = node[".name"]
 						else
+							if to_node.remarks then
+								to_outbound.tag = to_outbound.tag .. ":" .. to_node.remarks
+							end
 							to_outbound.tag = outbound.tag .. " -> " .. to_outbound.tag
 						end
-
-						to_outbound.detour = outbound.tag
+						if to_node.type == "sing-box" then
+							to_outbound.detour = outbound.tag
+						end
 						table.insert(outbounds_table, to_outbound)
 						default_outTag = to_outbound.tag
 					end
@@ -1210,9 +1257,9 @@ function gen_config(var)
 			return default_outTag, last_insert_outbound
 		end
 
-		if node.protocol == "_shunt" then
-			local rules = {}
+		rules = {}
 
+		if node.protocol == "_shunt" then
 			local preproxy_rule_name = node.preproxy_enabled == "1" and "main" or nil
 			local preproxy_tag = preproxy_rule_name
 			local preproxy_node_id = preproxy_rule_name and node["main_node"] or nil
@@ -1230,21 +1277,11 @@ function gen_config(var)
 				elseif _node_id == "_default" and rule_name ~= "default" then
 					rule_outboundTag = "default"
 				elseif _node_id and _node_id:find("Socks_") then
-					local socks_id = _node_id:sub(1 + #"Socks_")
-					local socks_node = uci:get_all(appname, socks_id) or nil
-					if socks_node then
-						local _node = {
-							type = "sing-box",
-							protocol = "socks",
-							address = "127.0.0.1",
-							port = socks_node.port,
-							uot = "1",
-						}
-						local _outbound = gen_outbound(flag, _node, rule_name)
-						if _outbound then
-							table.insert(outbounds, _outbound)
-							rule_outboundTag = _outbound.tag
-						end
+					local socks_node = gen_socks_config_node(_node_id)
+					local _outbound = gen_outbound(flag, socks_node, rule_name)
+					if _outbound then
+						table.insert(outbounds, _outbound)
+						rule_outboundTag = _outbound.tag
 					end
 				elseif _node_id then
 					local _node = uci:get_all(appname, _node_id)
@@ -1541,10 +1578,6 @@ function gen_config(var)
 					table.insert(rules, rule)
 				end
 			end)
-
-			for index, value in ipairs(rules) do
-				table.insert(route.rules, rules[index])
-			end
 		elseif node.protocol == "_urltest" then
 			if node.urltest_node then
 				COMMON.default_outbound_tag = gen_urltest(node)
@@ -1571,6 +1604,10 @@ function gen_config(var)
 					table.insert(outbounds, last_insert_outbound)
 				end
 			end
+		end
+
+		for index, value in ipairs(rules) do
+			table.insert(route.rules, rules[index])
 		end
 	end
 
