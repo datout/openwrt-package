@@ -4,59 +4,48 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-adguardhome
-PKG_RELEASE:=15
+PKG_VERSION:=1.1.1
+PKG_MAINTAINER:=<https://github.com/sirpdboy/luci-app-adguardhome>
 
-PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)
+LUCI_TITLE:=LuCI app for AdGuardHome
+LUCI_PKGARCH:=all
+LUCI_DEPENDS:=+ca-certs +!wget&&!curl&&!wget-ssl:curl
+LUCI_DESCRIPTION:=LuCI support for AdGuardHome
 
-include $(INCLUDE_DIR)/package.mk
 
-define Package/luci-app-adguardhome
-	SECTION:=luci
-	CATEGORY:=LuCI
-	SUBMENU:=3. Applications
-	TITLE:=LuCI app for adguardhome
-	PKG_MAINTAINER:=<https://github.com/rufengsuixing/luci-app-adguardhome>
-	PKGARCH:=all
-	DEPENDS:=+!wget-ssl&&!curl:wget-ssl
-endef
-
-define Package/luci-app-adguardhome/description
-	LuCI support for adguardhome
-endef
-
-define Build/Prepare
-endef
-
-define Build/Compile
-endef
-
-define Package/luci-app-adguardhome/conffiles
-/usr/share/AdGuardHome/links.txt
+define Package/$(PKG_NAME)/conffiles
 /etc/config/AdGuardHome
+/etc/AdGuardHome.yaml
 endef
 
-define Package/luci-app-adguardhome/install
-    $(INSTALL_DIR) $(1)/usr/lib/lua/luci
-	cp -pR ./luasrc/* $(1)/usr/lib/lua/luci
-	$(INSTALL_DIR) $(1)/
-	cp -pR ./root/* $(1)/
-	$(INSTALL_DIR) $(1)/usr/lib/lua/luci/i18n
-	po2lmo ./po/zh_Hans/AdGuardHome.po $(1)/usr/lib/lua/luci/i18n/AdGuardHome.zh-cn.lmo
-endef
-
-define Package/luci-app-adguardhome/postinst
+define Package/$(PKG_NAME)/preinst
 #!/bin/sh
+	uci -q batch <<-EOF >/dev/null 2>&1
+		delete ucitrack.@AdGuardHome[-1]
+		add ucitrack AdGuardHome
+		set ucitrack.@AdGuardHome[-1].init=AdGuardHome
+		commit ucitrack
+	EOF
+	rm -f /tmp/luci-indexcache
+exit 0
+endef
+
+define Package/$(PKG_NAME)/postinst
+
+#!/bin/sh
+	chmod +x /usr/share/AdGuardHome/*
+	chmod +x /etc/init.d/AdGuardHome
 	/etc/init.d/AdGuardHome enable >/dev/null 2>&1
 	enable=$(uci get AdGuardHome.AdGuardHome.enabled 2>/dev/null)
 	if [ "$enable" == "1" ]; then
-		/etc/init.d/AdGuardHome reload
+		/etc/init.d/AdGuardHome reload >/dev/null 2>&1
 	fi
 	rm -f /tmp/luci-indexcache
 	rm -f /tmp/luci-modulecache/*
 exit 0
 endef
 
-define Package/luci-app-adguardhome/prerm
+define Package/$(PKG_NAME)/prerm
 #!/bin/sh
 if [ -z "$${IPKG_INSTROOT}" ]; then
      /etc/init.d/AdGuardHome disable
@@ -69,4 +58,11 @@ fi
 exit 0
 endef
 
-$(eval $(call BuildPackage,luci-app-adguardhome))
+define Package/$(PKG_NAME)/postrm
+#!/bin/sh
+rm -rf /etc/AdGuardHome/
+exit 0
+endef
+include $(TOPDIR)/feeds/luci/luci.mk
+
+# call BuildPackage - OpenWrt buildroot signature

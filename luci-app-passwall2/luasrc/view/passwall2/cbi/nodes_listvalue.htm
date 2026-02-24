@@ -96,7 +96,7 @@ window.lv_dropdown_data["<%=cbid%>"] = <%=json.stringify(dropdown_data)%>;
 	<!-- 模拟 ListValue 控件外观 -->
 	<div class="cbi-input-value cbi-input-select lv-dropdown-display" id="<%=cbid%>.display" tabindex="0">
 		<span id="<%=cbid%>.label" class="lv-dropdown-label" title="<%=pcdata(current_label)%>">
-			<%=pcdata(current_label ~= "" and current_label or ("("..translate("Not set")..")"))%>
+			<%=pcdata("("..translate("Not set")..")")%>
 		</span>
 		<span class="lv-arrow-down"></span>
 	</div>
@@ -104,7 +104,7 @@ window.lv_dropdown_data["<%=cbid%>"] = <%=json.stringify(dropdown_data)%>;
 	<div id="<%=cbid%>.panel" class="cbi-listvalue-panel lv-dropdown-panel" style="display:none;">
 		<!-- 搜索框 -->
 		<div style="padding:8px;border-bottom:1px solid #f0f0f0;">
-			<input id="<%=cbid%>.search" class="cbi-input-text lv-dropdown-search" type="text" placeholder="<%:Search nodes...%>" />
+			<input id="<%=cbid%>.search" class="cbi-input-text lv-dropdown-search" type="text" placeholder="🔍 <%:Search nodes...%>" inputmode="search" enterkeyhint="done" />
 		</div>
 		<!-- 列表容器 -->
 		<div id="<%=cbid%>.list" style="padding:8px;">
@@ -112,8 +112,6 @@ window.lv_dropdown_data["<%=cbid%>"] = <%=json.stringify(dropdown_data)%>;
 		</div>
 	</div>
 </div>
-
-<%+cbi/valuefooter%>
 
 <script type="text/javascript">
 //<![CDATA[
@@ -140,6 +138,11 @@ window.lv_dropdown_data["<%=cbid%>"] = <%=json.stringify(dropdown_data)%>;
 		}
 	});
 	lv_registerAdaptive(cbid);
+	setTimeout(() => {
+		labelSpan.textContent = lv_ellipsisByWidth(cbid, '<%=pcdata(current_label ~= "" and current_label or ("("..translate("Not set")..")"))%>');
+	}, 100);
 })();
 //]]>
 </script>
+
+<%+cbi/valuefooter%>

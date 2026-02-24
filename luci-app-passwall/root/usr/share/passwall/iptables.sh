@@ -2,7 +2,9 @@
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 MY_PATH=$DIR/iptables.sh
+UTILS_PATH=$DIR/utils.sh
 IPSET_LOCAL="passwall_local"
+IPSET_WAN="passwall_wan"
 IPSET_LAN="passwall_lan"
 IPSET_VPS="passwall_vps"
 IPSET_SHUNT="passwall_shunt"
@@ -13,6 +15,7 @@ IPSET_WHITE="passwall_white"
 IPSET_BLOCK="passwall_block"
 
 IPSET_LOCAL6="passwall_local6"
+IPSET_WAN6="passwall_wan6"
 IPSET_LAN6="passwall_lan6"
 IPSET_VPS6="passwall_vps6"
 IPSET_SHUNT6="passwall_shunt6"
@@ -26,8 +29,6 @@ FORCE_INDEX=2
 
 USE_SHUNT_TCP=0
 USE_SHUNT_UDP=0
-
-. /lib/functions/network.sh
 
 ipt=$(command -v iptables-legacy || command -v iptables)
 ip6t=$(command -v ip6tables-legacy || command -v ip6tables)
@@ -193,36 +194,6 @@ get_jump_ipt() {
 	esac
 }
 
-gen_lanlist() {
-	cat $RULES_PATH/lanlist_ipv4 | tr -s '\n' | grep -v "^#"
-}
-
-gen_lanlist_6() {
-	cat $RULES_PATH/lanlist_ipv6 | tr -s '\n' | grep -v "^#"
-}
-
-get_wan_ip() {
-	local NET_IF
-	local NET_ADDR
-	
-	network_flush_cache
-	network_find_wan NET_IF
-	network_get_ipaddr NET_ADDR "${NET_IF}"
-	
-	echo $NET_ADDR
-}
-
-get_wan6_ip() {
-	local NET_IF
-	local NET_ADDR
-	
-	network_flush_cache
-	network_find_wan6 NET_IF
-	network_get_ipaddr6 NET_ADDR "${NET_IF}"
-	
-	echo $NET_ADDR
-}
-
 load_acl() {
 	([ "$ENABLED_ACLS" == 1 ] || ([ "$ENABLED_DEFAULT_ACL" == 1 ] && [ "$CLIENT_PROXY" == 1 ])) && echolog "  - 访问控制："
 	[ "$ENABLED_ACLS" == 1 ] && {
@@ -311,7 +282,6 @@ load_acl() {
 				local _ipt_source _ipv4
 				local msg
 				if [ -n "${interface}" ]; then
-					. /lib/functions/network.sh
 					local gateway device
 					network_get_gateway gateway "${interface}"
 					network_get_device device "${interface}"
@@ -762,6 +732,9 @@ filter_vpsip() {
 	echolog "  - [$?]加入所有IPv4节点到ipset[$IPSET_VPS]直连完成"
 	uci show $CONFIG | grep -E "(.address=|.download_address=)" | cut -d "'" -f 2 | grep -E "([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4}" | sed -e "/^$/d" | sed -e "s/^/add $IPSET_VPS6 &/g" | awk '{print $0} END{print "COMMIT"}' | ipset -! -R
 	echolog "  - [$?]加入所有IPv6节点到ipset[$IPSET_VPS6]直连完成"
+	#订阅方式为直连时
+	get_subscribe_host | grep -E "([0-9]{1,3}[\.]){3}[0-9]{1,3}" | grep -v "^127\.0\.0\.1$" | sed -e "/^$/d" | sed -e "s/^/add $IPSET_VPS &/g" | awk '{print $0} END{print "COMMIT"}' | ipset -! -R
+	get_subscribe_host | grep -E "([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4}" | sed -e "/^$/d" | sed -e "s/^/add $IPSET_VPS6 &/g" | awk '{print $0} END{print "COMMIT"}' | ipset -! -R
 }
 
 filter_server_port() {
@@ -811,6 +784,7 @@ filter_direct_node_list() {
 add_firewall_rule() {
 	echolog "开始加载 iptables 防火墙规则..."
 	ipset -! create $IPSET_LOCAL nethash maxelem 1048576
+	ipset -! create $IPSET_WAN nethash maxelem 1048576
 	ipset -! create $IPSET_LAN nethash maxelem 1048576
 	ipset -! create $IPSET_VPS nethash maxelem 1048576
 	ipset -! create $IPSET_SHUNT nethash maxelem 1048576 timeout 172800
@@ -821,6 +795,7 @@ add_firewall_rule() {
 	ipset -! create $IPSET_BLOCK nethash maxelem 1048576 timeout 172800
 
 	ipset -! create $IPSET_LOCAL6 nethash family inet6 maxelem 1048576
+	ipset -! create $IPSET_WAN6 nethash family inet6 maxelem 1048576
 	ipset -! create $IPSET_LAN6 nethash family inet6 maxelem 1048576
 	ipset -! create $IPSET_VPS6 nethash family inet6 maxelem 1048576
 	ipset -! create $IPSET_SHUNT6 nethash family inet6 maxelem 1048576 timeout 172800
@@ -841,6 +816,7 @@ add_firewall_rule() {
 	local _TCP_NODE=$(config_t_get global tcp_node)
 	local _UDP_NODE=$(config_t_get global udp_node)
 	local USE_GEOVIEW=$(config_t_get global_rules enable_geoview)
+	[ -z "$(first_type $(config_t_get global_app geoview_file) geoview)" ] && USE_GEOVIEW=0
 
 	[ -n "$_TCP_NODE" ] && [ "$(config_n_get $_TCP_NODE protocol)" = "_shunt" ] && USE_SHUNT_TCP=1 && USE_SHUNT_NODE=1
 	[ -n "$_UDP_NODE" ] && [ "$(config_n_get $_UDP_NODE protocol)" = "_shunt" ] && USE_SHUNT_UDP=1 && USE_SHUNT_NODE=1
@@ -865,7 +841,7 @@ add_firewall_rule() {
 		cat $RULES_PATH/direct_ip | tr -s "\r\n" "\n" | grep -v "^#" | sed -e "/^$/d" | grep -E "([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4}" | sed -e "s/^/add $IPSET_WHITE6 &/g" -e "s/$/ timeout 0/g" | ipset -! -R
 		[ "$USE_GEOVIEW" = "1" ] && {
 			local GEOIP_CODE=$(cat $RULES_PATH/direct_ip | tr -s "\r\n" "\n" | sed -e "/^$/d" | grep -E "^geoip:" | grep -v "^geoip:private" | sed -E 's/^geoip:(.*)/\1/' | sed ':a;N;$!ba;s/\n/,/g')
-			if [ -n "$GEOIP_CODE" ] && type geoview &> /dev/null; then
+			if [ -n "$GEOIP_CODE" ]; then
 				get_geoip $GEOIP_CODE ipv4 | grep -E "(\.((2(5[0-5]|[0-4][0-9]))|[0-1]?[0-9]{1,2})){3}" | sed -e "s/^/add $IPSET_WHITE &/g" -e "s/$/ timeout 0/g" | ipset -! -R
 				get_geoip $GEOIP_CODE ipv6 | grep -E "([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4}" | sed -e "s/^/add $IPSET_WHITE6 &/g" -e "s/$/ timeout 0/g" | ipset -! -R
 				echolog "  - [$?]解析并加入[直连列表] GeoIP 到 IPSET 完成"
@@ -879,7 +855,7 @@ add_firewall_rule() {
 		cat $RULES_PATH/proxy_ip | tr -s "\r\n" "\n" | grep -v "^#" | sed -e "/^$/d" | grep -E "([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4}" | sed -e "s/^/add $IPSET_BLACK6 &/g" -e "s/$/ timeout 0/g" | ipset -! -R
 		[ "$USE_GEOVIEW" = "1" ] && {
 			local GEOIP_CODE=$(cat $RULES_PATH/proxy_ip | tr -s "\r\n" "\n" | sed -e "/^$/d" | grep -E "^geoip:" | grep -v "^geoip:private" | sed -E 's/^geoip:(.*)/\1/' | sed ':a;N;$!ba;s/\n/,/g')
-			if [ -n "$GEOIP_CODE" ] && type geoview &> /dev/null; then
+			if [ -n "$GEOIP_CODE" ]; then
 				get_geoip $GEOIP_CODE ipv4 | grep -E "(\.((2(5[0-5]|[0-4][0-9]))|[0-1]?[0-9]{1,2})){3}" | sed -e "s/^/add $IPSET_BLACK &/g" -e "s/$/ timeout 0/g" | ipset -! -R
 				get_geoip $GEOIP_CODE ipv6 | grep -E "([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4}" | sed -e "s/^/add $IPSET_BLACK6 &/g" -e "s/$/ timeout 0/g" | ipset -! -R
 				echolog "  - [$?]解析并加入[代理列表] GeoIP 到 IPSET 完成"
@@ -893,7 +869,7 @@ add_firewall_rule() {
 		cat $RULES_PATH/block_ip | tr -s "\r\n" "\n" | grep -v "^#" | sed -e "/^$/d" | grep -E "([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4}" | sed -e "s/^/add $IPSET_BLOCK6 &/g" -e "s/$/ timeout 0/g" | ipset -! -R
 		[ "$USE_GEOVIEW" = "1" ] && {
 			local GEOIP_CODE=$(cat $RULES_PATH/block_ip | tr -s "\r\n" "\n" | sed -e "/^$/d" | grep -E "^geoip:" | grep -v "^geoip:private" | sed -E 's/^geoip:(.*)/\1/' | sed ':a;N;$!ba;s/\n/,/g')
-			if [ -n "$GEOIP_CODE" ] && type geoview &> /dev/null; then
+			if [ -n "$GEOIP_CODE" ]; then
 				get_geoip $GEOIP_CODE ipv4 | grep -E "(\.((2(5[0-5]|[0-4][0-9]))|[0-1]?[0-9]{1,2})){3}" | sed -e "s/^/add $IPSET_BLOCK &/g" -e "s/$/ timeout 0/g" | ipset -! -R
 				get_geoip $GEOIP_CODE ipv6 | grep -E "([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4}" | sed -e "s/^/add $IPSET_BLOCK6 &/g" -e "s/$/ timeout 0/g" | ipset -! -R
 				echolog "  - [$?]解析并加入[屏蔽列表] GeoIP 到 IPSET 完成"
@@ -913,7 +889,7 @@ add_firewall_rule() {
 				[ -n "$geoip_code" ] && GEOIP_CODE="${GEOIP_CODE:+$GEOIP_CODE,}$geoip_code"
 			}
 		done
-		if [ -n "$GEOIP_CODE" ] && type geoview &> /dev/null; then
+		if [ -n "$GEOIP_CODE" ]; then
 			get_geoip $GEOIP_CODE ipv4 | grep -E "(\.((2(5[0-5]|[0-4][0-9]))|[0-1]?[0-9]{1,2})){3}" | sed -e "s/^/add $IPSET_SHUNT &/g" -e "s/$/ timeout 0/g" | ipset -! -R
 			get_geoip $GEOIP_CODE ipv6 | grep -E "([A-Fa-f0-9]{1,4}::?){1,7}[A-Fa-f0-9]{1,4}" | sed -e "s/^/add $IPSET_SHUNT6 &/g" -e "s/$/ timeout 0/g" | ipset -! -R
 			echolog "  - [$?]解析并加入[分流节点] GeoIP 到 IPSET 完成"
@@ -988,8 +964,12 @@ add_firewall_rule() {
 	$ipt_n -A PSW $(dst $IPSET_LAN) -j RETURN
 	$ipt_n -A PSW $(dst $IPSET_VPS) -j RETURN
 
-	WAN_IP=$(get_wan_ip)
-	[ ! -z "${WAN_IP}" ] && $ipt_n -A PSW $(comment "WAN_IP_RETURN") -d "${WAN_IP}" -j RETURN
+	WAN_IP=$(get_wan_ips ip4)
+	[ ! -z "${WAN_IP}" ] && {
+		for wan_ip in $WAN_IP; do
+			$ipt_n -A PSW $(comment "WAN_IP_RETURN") -d "${wan_ip}" -j RETURN
+		done
+	}
 	
 	[ "$accept_icmp" = "1" ] && insert_rule_after "$ipt_n" "PREROUTING" "prerouting_rule" "-p icmp -j PSW"
 	[ -z "${is_tproxy}" ] && insert_rule_after "$ipt_n" "PREROUTING" "prerouting_rule" "-p tcp -j PSW"
@@ -1024,10 +1004,14 @@ add_firewall_rule() {
 	$ipt_m -A PSW $(dst $IPSET_VPS) -j RETURN
 	
 	[ ! -z "${WAN_IP}" ] && {
-		$ipt_m -A PSW $(comment "WAN_IP_RETURN") -d "${WAN_IP}" -j RETURN
-		echolog "  - [$?]追加WAN IP到iptables：${WAN_IP}"
+		ipset -F $IPSET_WAN
+		for wan_ip in $WAN_IP; do
+			ipset -! add $IPSET_WAN ${wan_ip}
+			echolog "  - [$?]加入WAN IPv4到ipset[$IPSET_WAN]：${wan_ip}"
+		done
+		$ipt_m -A PSW $(comment "WAN_IP_RETURN") $(dst $IPSET_WAN) -j RETURN
 	}
-	unset WAN_IP
+	unset WAN_IP wan_ip
 
 	insert_rule_before "$ipt_m" "PREROUTING" "mwan3" "-j PSW"
 	insert_rule_before "$ipt_m" "PREROUTING" "PSW" "-p tcp -m socket -j PSW_DIVERT"
@@ -1096,9 +1080,16 @@ add_firewall_rule() {
 	$ip6t_m -A PSW $(dst $IPSET_LAN6) -j RETURN
 	$ip6t_m -A PSW $(dst $IPSET_VPS6) -j RETURN
 	
-	WAN6_IP=$(get_wan6_ip)
-	[ ! -z "${WAN6_IP}" ] && $ip6t_m -A PSW $(comment "WAN6_IP_RETURN") -d ${WAN6_IP} -j RETURN
-	unset WAN6_IP
+	WAN6_IP=$(get_wan_ips ip6)
+	[ ! -z "${WAN6_IP}" ] && {
+		ipset -F $IPSET_WAN6
+		for wan6_ip in $WAN6_IP; do
+			ipset -! add $IPSET_WAN6 ${wan6_ip}
+			echolog "  - [$?]加入WAN IPv6到ipset[$IPSET_WAN6]：${wan6_ip}"
+		done
+		$ip6t_m -A PSW $(comment "WAN6_IP_RETURN") $(dst $IPSET_WAN6) -j RETURN
+	}
+	unset WAN6_IP wan6_ip
 
 	insert_rule_before "$ip6t_m" "PREROUTING" "mwan3" "-j PSW"
 	insert_rule_before "$ip6t_m" "PREROUTING" "PSW" "-p tcp -m socket -j PSW_DIVERT"
@@ -1356,6 +1347,7 @@ del_firewall_rule() {
 	ip -6 route del local ::/0 dev lo table 100 2>/dev/null
 
 	destroy_ipset $IPSET_LOCAL
+	destroy_ipset $IPSET_WAN
 	destroy_ipset $IPSET_LAN
 	destroy_ipset $IPSET_VPS
 	#destroy_ipset $IPSET_SHUNT
@@ -1366,6 +1358,7 @@ del_firewall_rule() {
 	destroy_ipset $IPSET_WHITE
 
 	destroy_ipset $IPSET_LOCAL6
+	destroy_ipset $IPSET_WAN6
 	destroy_ipset $IPSET_LAN6
 	destroy_ipset $IPSET_VPS6
 	#destroy_ipset $IPSET_SHUNT6
@@ -1375,11 +1368,11 @@ del_firewall_rule() {
 	destroy_ipset $IPSET_BLOCK6
 	destroy_ipset $IPSET_WHITE6
 
-	$DIR/app.sh echolog "删除 iptables 规则完成。"
+	echolog "删除 iptables 规则完成。"
 }
 
 flush_ipset() {
-	$DIR/app.sh echolog "清空 IPSet。"
+	echolog "清空 IPSet。"
 	for _name in $(ipset list | grep "Name: " | grep "passwall_" | awk '{print $2}'); do
 		destroy_ipset ${_name}
 	done
@@ -1403,6 +1396,7 @@ gen_include() {
 	local __ipt=""
 	[ -n "${ipt}" ] && {
 		__ipt=$(cat <<- EOF
+			. $UTILS_PATH
 			mangle_output_psw=\$(${ipt}-save -t mangle | grep "PSW" | grep "mangle\-OUTPUT\-PSW" | sed "s#-A OUTPUT ##g")
 			$ipt-save -c | grep -v "PSW" | $ipt-restore -c
 			$ipt-restore -n <<-EOT
@@ -1420,23 +1414,20 @@ gen_include() {
 			\$(${MY_PATH} insert_rule_before "$ipt_m" "PREROUTING" "mwan3" "-j PSW")
 			\$(${MY_PATH} insert_rule_before "$ipt_m" "PREROUTING" "PSW" "-p tcp -m socket -j PSW_DIVERT")
 
-			WAN_IP=\$(${MY_PATH} get_wan_ip)
-
-			PR_INDEX=\$(${MY_PATH} RULE_LAST_INDEX "$ipt_n" PSW WAN_IP_RETURN -1)
-			if [ \$PR_INDEX -ge 0 ]; then
-				[ ! -z "\${WAN_IP}" ] && $ipt_n -R PSW \$PR_INDEX $(comment "WAN_IP_RETURN") -d "\${WAN_IP}" -j RETURN
-			fi
-
-			PR_INDEX=\$(${MY_PATH} RULE_LAST_INDEX "$ipt_m" PSW WAN_IP_RETURN -1)
-			if [ \$PR_INDEX -ge 0 ]; then
-				[ ! -z "\${WAN_IP}" ] && $ipt_m -R PSW \$PR_INDEX $(comment "WAN_IP_RETURN") -d "\${WAN_IP}" -j RETURN
-			fi
+			WAN_IP=\$(get_wan_ips ip4)
+			[ ! -z "\${WAN_IP}" ] && {
+				ipset -F $IPSET_WAN
+				for wan_ip in \$WAN_IP; do
+					ipset -! add $IPSET_WAN \${wan_ip}
+				done
+			}
 		EOF
 		)
 	}
 	local __ip6t=""
 	[ -n "${ip6t}" ] && {
 		__ip6t=$(cat <<- EOF
+			. $UTILS_PATH
 			mangle_output_psw=\$(${ip6t}-save -t mangle | grep "PSW" | grep "mangle\-OUTPUT\-PSW" | sed "s#-A OUTPUT ##g")
 			$ip6t-save -c | grep -v "PSW" | $ip6t-restore -c
 			$ip6t-restore -n <<-EOT
@@ -1453,11 +1444,13 @@ gen_include() {
 			\$(${MY_PATH} insert_rule_before "$ip6t_m" "PREROUTING" "mwan3" "-j PSW")
 			\$(${MY_PATH} insert_rule_before "$ip6t_m" "PREROUTING" "PSW" "-p tcp -m socket -j PSW_DIVERT")
 
-			PR_INDEX=\$(${MY_PATH} RULE_LAST_INDEX "$ip6t_m" PSW WAN6_IP_RETURN -1)
-			if [ \$PR_INDEX -ge 0 ]; then
-				WAN6_IP=\$(${MY_PATH} get_wan6_ip)
-				[ ! -z "\${WAN6_IP}" ] && $ip6t_m -R PSW \$PR_INDEX $(comment "WAN6_IP_RETURN") -d "\${WAN6_IP}" -j RETURN
-			fi
+			WAN6_IP=\$(get_wan_ips ip6)
+			[ ! -z "\${WAN6_IP}" ] && {
+				ipset -F $IPSET_WAN6
+				for wan6_ip in \$WAN6_IP; do
+					ipset -! add $IPSET_WAN6 \${wan6_ip}
+				done
+			}
 		EOF
 		)
 	}
@@ -1486,6 +1479,7 @@ start() {
 }
 
 stop() {
+	[ -z "$(command -v echolog)" ] && . /usr/share/passwall/utils.sh
 	del_firewall_rule
 	[ $(config_t_get global flush_set_on_reboot "0") = "1" -o $(config_t_get global flush_set "0") = "1" ] && {
 		uci -q delete ${CONFIG}.@global[0].flush_set
@@ -1514,12 +1508,6 @@ get_ipt_bin)
 	;;
 get_ip6t_bin)
 	get_ip6t_bin
-	;;
-get_wan_ip)
-	get_wan_ip
-	;;
-get_wan6_ip)
-	get_wan6_ip
 	;;
 filter_direct_node_list)
 	filter_direct_node_list
