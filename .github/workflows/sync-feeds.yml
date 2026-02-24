@@ -16,6 +16,7 @@ jobs:
       matrix:
         target:
           - Lede
+          - Immortalwrt
 
     steps:
       - name: Checkout (main)
@@ -36,7 +37,7 @@ jobs:
           echo "---- sources ----"
           ls -la sources
           echo "---- list file ----"
-          sed -n '1,5p' sources/Lede.list
+          sed -n '1,5p' sources/${{ matrix.target }}.list
 
       - name: Configure git
         run: |
