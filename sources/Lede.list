@@ -7,3 +7,4 @@ https://github.com/fw876/helloworld.git master luci-app-ssr-plus lua-neturl mosd
 https://github.com/yingziwu/luci-app-fakehttp.git main .
 https://github.com/jerrykuku/luci-theme-argon.git master .
 https://github.com/sirpdboy/luci-app-adguardhome.git main luci-app-adguardhome
+https://github.com/nikkinikki-org/OpenWrt-nikki.git main luci-app-nikki nikki
